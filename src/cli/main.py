@@ -34,7 +34,9 @@ def cli(debug: bool) -> None:
 @click.option("--length", "-l", default=1500, help="Target word count")
 @click.option("--output", "-o", default="output/articles", help="Output directory")
 @click.option("--format", "-f", type=click.Choice(["md", "json", "both"]), default="md")
-def create(topic: str, length: int, output: str, format: str) -> None:
+@click.option("--notion", is_flag=True, help="Publish to Notion as draft")
+@click.option("--no-local", is_flag=True, help="Don't save locally (use with --notion)")
+def create(topic: str, length: int, output: str, format: str, notion: bool, no_local: bool) -> None:
     """Create new content on a topic."""
     console.print(Panel(f"[bold blue]Creating content about:[/] {topic}"))
 
@@ -54,15 +56,33 @@ def create(topic: str, length: int, output: str, format: str) -> None:
                 target_length=length,
             )
 
-            progress.update(task, description="Saving content...")
+            # Save locally unless --no-local is set
+            if not no_local:
+                progress.update(task, description="Saving content...")
 
-            if format in ("md", "both"):
-                md_path = store.save(result)
-                console.print(f"[green]Markdown saved:[/] {md_path}")
+                if format in ("md", "both"):
+                    md_path = store.save(result)
+                    console.print(f"[green]Markdown saved:[/] {md_path}")
 
-            if format in ("json", "both"):
-                json_path = store.save_json(result)
-                console.print(f"[green]JSON saved:[/] {json_path}")
+                if format in ("json", "both"):
+                    json_path = store.save_json(result)
+                    console.print(f"[green]JSON saved:[/] {json_path}")
+
+            # Publish to Notion if requested
+            if notion:
+                progress.update(task, description="Publishing to Notion...")
+                try:
+                    from src.integrations.notion import NotionPublisher
+
+                    publisher = NotionPublisher()
+                    publish_result = publisher.publish(result)
+
+                    if publish_result.success:
+                        console.print(f"[green]Published to Notion:[/] {publish_result.page_url}")
+                    else:
+                        console.print(f"[red]Notion publish failed:[/] {publish_result.error}")
+                except Exception as e:
+                    console.print(f"[red]Notion error:[/] {e}")
 
             return result
 
@@ -248,6 +268,49 @@ def list_content() -> None:
         )
 
     console.print(table)
+
+
+@cli.command("notion-status")
+def notion_status() -> None:
+    """Check Notion integration status."""
+    console.print(Panel("[bold blue]Notion Integration Status[/]"))
+
+    try:
+        from src.integrations.notion import NotionPublisher
+
+        publisher = NotionPublisher()
+
+        if publisher.test_connection():
+            console.print("[green]Connection successful![/]")
+
+            # Get database info
+            db = publisher.client.get_database(publisher.database_id)
+            if db:
+                db_title = db.get("title", [{}])[0].get("plain_text", "Unknown")
+                console.print(f"Database: {db_title}")
+                console.print(f"Database ID: {publisher.database_id}")
+
+                # Show properties
+                props = db.get("properties", {})
+                table = Table(title="Database Properties")
+                table.add_column("Property", style="cyan")
+                table.add_column("Type", style="green")
+
+                for name, prop in props.items():
+                    table.add_row(name, prop.get("type", "unknown"))
+
+                console.print(table)
+        else:
+            console.print("[red]Connection failed![/]")
+            console.print("Check your NOTION_TOKEN and NOTION_DATABASE_ID")
+
+    except ValueError as e:
+        console.print(f"[red]Configuration error:[/] {e}")
+        console.print("\nMake sure you have set:")
+        console.print("  - NOTION_TOKEN")
+        console.print("  - NOTION_DATABASE_ID")
+    except Exception as e:
+        console.print(f"[red]Error:[/] {e}")
 
 
 if __name__ == "__main__":

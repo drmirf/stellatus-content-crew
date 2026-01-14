@@ -54,6 +54,14 @@ class PipelineSettings(BaseModel):
     retry_attempts: int = 2
 
 
+class NotionSettings(BaseModel):
+    """Notion integration settings."""
+
+    enabled: bool = False
+    database_id: str = ""
+    default_status: str = "Rascunho"
+
+
 class Settings(BaseModel):
     """Main application settings."""
 
@@ -63,10 +71,12 @@ class Settings(BaseModel):
     rag: RAGSettings = Field(default_factory=RAGSettings)
     content: ContentSettings = Field(default_factory=ContentSettings)
     pipeline: PipelineSettings = Field(default_factory=PipelineSettings)
+    notion: NotionSettings = Field(default_factory=NotionSettings)
 
     # API keys from environment
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
+    notion_token: str | None = None
 
     @classmethod
     def load_from_yaml(cls, config_dir: str | Path = "config") -> "Settings":
@@ -91,6 +101,14 @@ class Settings(BaseModel):
         # Override with environment variables
         data["anthropic_api_key"] = os.getenv("ANTHROPIC_API_KEY")
         data["openai_api_key"] = os.getenv("OPENAI_API_KEY")
+        data["notion_token"] = os.getenv("NOTION_TOKEN")
+
+        # Notion settings from env
+        if os.getenv("NOTION_DATABASE_ID"):
+            if "notion" not in data:
+                data["notion"] = {}
+            data["notion"]["database_id"] = os.getenv("NOTION_DATABASE_ID")
+            data["notion"]["enabled"] = True
 
         if os.getenv("DEBUG"):
             data["debug"] = os.getenv("DEBUG", "").lower() == "true"
