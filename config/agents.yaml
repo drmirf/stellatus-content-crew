@@ -1,0 +1,78 @@
+# Agent configurations for the content creation crew
+
+agents:
+  research:
+    enabled: true
+    priority: 10
+    category: content
+    skills:
+      - web_search
+      - rag_query
+      - llm_call
+    settings:
+      max_sources: 10
+      include_rag: true
+
+  writer:
+    enabled: true
+    priority: 9
+    category: content
+    skills:
+      - rag_query
+      - llm_call
+    settings:
+      style_matching: true
+      tone: mystical_professional
+
+  editor:
+    enabled: true
+    priority: 8
+    category: content
+    skills:
+      - rag_query
+      - llm_call
+    settings:
+      grammar_strictness: high
+      style_consistency: true
+
+  seo:
+    enabled: true
+    priority: 7
+    category: content
+    skills:
+      - keyword_extraction
+      - llm_call
+    settings:
+      keyword_density: 0.02
+      meta_description_length: 160
+
+  quality_reviewer:
+    enabled: true
+    priority: 6
+    category: content
+    skills:
+      - rag_query
+      - llm_call
+    settings:
+      min_score: 75
+      fact_check_enabled: true
+
+  image_prompt:
+    enabled: true
+    priority: 5
+    category: content
+    skills:
+      - llm_call
+    settings:
+      style: ethereal_professional
+      include_negative_prompts: true
+
+  visual_suggestion:
+    enabled: true
+    priority: 4
+    category: content
+    skills:
+      - llm_call
+    settings:
+      layout_format: blog
+      include_colors: true

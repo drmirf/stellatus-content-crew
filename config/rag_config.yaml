@@ -1,0 +1,29 @@
+rag:
+  embedding_provider: openai
+  embedding_model: text-embedding-3-small
+  vector_store_path: data/vector_store
+  chunk_size: 500
+  chunk_overlap: 50
+  default_n_results: 5
+
+  collections:
+    style_reference:
+      name: style_reference
+      description: Artigos existentes do blog para referência de estilo e tom
+      chunking:
+        strategy: semantic
+        chunk_size: 500
+        overlap: 50
+
+    knowledge_base:
+      name: knowledge_base
+      description: PDFs e documentos de referência sobre misticismo e gestão
+      chunking:
+        strategy: paragraph
+        chunk_size: 1000
+        overlap: 100
+
+  retrieval:
+    default_n_results: 5
+    reranking_enabled: false
+    similarity_threshold: 0.7

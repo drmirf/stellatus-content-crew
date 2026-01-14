@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stellatus-content-crew"
+version = "0.1.0"
+description = "AI-powered content creation crew for Mysticism & Business blog"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Amir Faria"}
+]
+keywords = ["ai", "agents", "content-creation", "rag", "blog"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "aiofiles>=23.0",
+    "rich>=13.0",
+    "anthropic>=0.18.0",
+    "openai>=1.12.0",
+    "chromadb>=0.4.22",
+    "sentence-transformers>=2.3.0",
+    "pypdf>=4.0.0",
+    "httpx>=0.26.0",
+    "duckduckgo-search>=4.0.0",
+    "click>=8.1.0",
+    "structlog>=24.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+]
+api = [
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+]
+
+[project.scripts]
+content-crew = "src.cli.main:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
