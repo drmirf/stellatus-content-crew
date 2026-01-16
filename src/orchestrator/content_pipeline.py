@@ -98,15 +98,26 @@ class ContentPipeline:
     7. Visual Suggestions - Layout recommendations
     """
 
+    STYLE_FILE = Path("config/writing_style.md")
+
     def __init__(self, orchestrator: Orchestrator | None = None) -> None:
         self.orchestrator = orchestrator or Orchestrator()
         self.settings = get_settings()
         self.logger = get_logger("pipeline.content")
 
+    def _load_writing_style(self) -> str:
+        """Load writing style from config file."""
+        if self.STYLE_FILE.exists():
+            self.logger.info("Loading writing style", path=str(self.STYLE_FILE))
+            return self.STYLE_FILE.read_text(encoding="utf-8")
+        self.logger.warning("Writing style file not found", path=str(self.STYLE_FILE))
+        return ""
+
     async def create_content(
         self,
         topic: str,
         target_length: int | None = None,
+        user_context: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> ContentResult:
         """Execute the full content creation pipeline."""
@@ -115,11 +126,16 @@ class ContentPipeline:
         pipeline_id = str(uuid4())
         target_length = target_length or self.settings.content.default_target_length
 
+        # Load writing style
+        writing_style = self._load_writing_style()
+
         self.logger.info(
             "Starting content pipeline",
             pipeline_id=pipeline_id,
             topic=topic,
             target_length=target_length,
+            has_user_context=bool(user_context),
+            has_writing_style=bool(writing_style),
         )
 
         await event_bus.publish(
@@ -133,6 +149,8 @@ class ContentPipeline:
         pipeline_context = {
             "topic": topic,
             "target_length": target_length,
+            "user_context": user_context or "",
+            "writing_style": writing_style,
             **(metadata or {}),
         }
 

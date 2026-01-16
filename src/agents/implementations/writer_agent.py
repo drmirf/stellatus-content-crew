@@ -49,8 +49,15 @@ class WriterAgent(BaseAgent):
         research_brief = task.metadata.get("research", {})
         topic = research_brief.get("topic", task.description)
         target_length = task.metadata.get("target_length", 1500)
+        user_context = task.metadata.get("user_context", "")
+        writing_style = task.metadata.get("writing_style", "")
 
-        self.logger.info("Starting content creation", topic=topic)
+        self.logger.info(
+            "Starting content creation",
+            topic=topic,
+            has_user_context=bool(user_context),
+            has_writing_style=bool(writing_style),
+        )
 
         # Step 1: Get style reference from RAG
         style_result = await self.execute_skill(
@@ -62,21 +69,46 @@ class WriterAgent(BaseAgent):
                 "format_as_context": True,
             },
         )
-        style_context = style_result.output if style_result.success else ""
+        rag_style_context = style_result.output if style_result.success else ""
+
+        # Build style section for prompts
+        style_section = ""
+        if writing_style:
+            style_section = f"""
+ESTILO DE ESCRITA DO AUTOR (SEGUIR OBRIGATORIAMENTE):
+{writing_style}
+"""
+        if rag_style_context:
+            style_section += f"""
+REFERÊNCIAS DE ESTILO DA BASE DE CONHECIMENTO:
+{rag_style_context}
+"""
+
+        # Build user context section
+        user_context_section = ""
+        if user_context:
+            user_context_section = f"""
+DIRETRIZES ESPECÍFICAS DO USUÁRIO (INCORPORAR NO ARTIGO):
+{user_context}
+"""
 
         # Step 2: Create content outline
         outline_prompt = f"""Crie um outline detalhado para um artigo de blog sobre:
 
 TÓPICO: {topic}
-
+{user_context_section}
 PESQUISA DISPONÍVEL:
 {research_brief.get('analysis', 'Nenhuma análise disponível')}
+
+BASE DE CONHECIMENTO (USAR COMO REFERÊNCIA):
+{research_brief.get('rag_context', 'Não disponível')}
 
 O artigo deve:
 - Ter aproximadamente {target_length} palavras
 - Equilibrar sabedoria mística/espiritual com aplicações práticas de gestão
 - Incluir introdução envolvente, corpo com 3-5 seções, e conclusão com call-to-action
 - Ser acessível para profissionais de negócios interessados em espiritualidade
+- INCORPORAR as diretrizes do usuário quando fornecidas
 
 Forneça o outline no formato:
 1. Título sugerido
@@ -84,7 +116,14 @@ Forneça o outline no formato:
 3. Seções principais (com subtópicos)
 4. Conclusão (síntese + call-to-action)"""
 
-        system_prompt = """Você é um escritor especializado em conteúdo que une misticismo, espiritualidade
+        # Use custom writing style if available, otherwise use default
+        if writing_style:
+            system_prompt = f"""Você é um escritor que segue RIGOROSAMENTE o estilo de escrita definido abaixo.
+{writing_style}
+
+Adapte seu tom, voz e estrutura conforme o estilo definido."""
+        else:
+            system_prompt = """Você é um escritor especializado em conteúdo que une misticismo, espiritualidade
 e sabedoria ancestral com práticas modernas de gestão e liderança. Seu estilo é:
 - Acessível mas profundo
 - Prático mas inspirador
@@ -103,14 +142,20 @@ e sabedoria ancestral com práticas modernas de gestão e liderança. Seu estilo
         write_prompt = f"""Escreva um artigo completo de blog seguindo este outline:
 
 {outline_result.output if outline_result.success else 'Crie um artigo estruturado sobre: ' + topic}
-
-REFERÊNCIA DE ESTILO (mantenha tom similar):
-{style_context}
-
+{style_section}
+{user_context_section}
 PESQUISA E INSIGHTS:
 {research_brief.get('analysis', '')}
 
-INSTRUÇÕES:
+BASE DE CONHECIMENTO (USAR COMO REFERÊNCIA PRINCIPAL):
+{research_brief.get('rag_context', '')}
+
+INSTRUÇÕES (ORDEM DE PRIORIDADE):
+1. PRIMEIRO: Siga o estilo de escrita definido
+2. SEGUNDO: Baseie o conteúdo na base de conhecimento
+3. TERCEIRO: Incorpore as diretrizes específicas do usuário
+4. QUARTO: Complemente com a pesquisa adicional
+
 - Escreva aproximadamente {target_length} palavras
 - Use linguagem envolvente e acessível
 - Inclua exemplos práticos quando possível
