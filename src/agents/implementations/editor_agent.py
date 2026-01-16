@@ -49,10 +49,15 @@ class EditorAgent(BaseAgent):
         draft = task.metadata.get("draft", {})
         content = draft.get("content", task.description)
         topic = draft.get("topic", "")
+        writing_style = task.metadata.get("writing_style", "")
 
-        self.logger.info("Starting content editing", topic=topic)
+        self.logger.info(
+            "Starting content editing",
+            topic=topic,
+            has_writing_style=bool(writing_style),
+        )
 
-        # Step 1: Get style reference
+        # Step 1: Get style reference from RAG
         style_result = await self.execute_skill(
             "rag_query",
             params={
@@ -61,33 +66,44 @@ class EditorAgent(BaseAgent):
                 "n_results": 2,
             },
         )
-        style_context = style_result.output if style_result.success else ""
+        rag_style_context = style_result.output if style_result.success else ""
+
+        # Build style section
+        style_section = ""
+        if writing_style:
+            style_section = f"""
+ESTILO DE ESCRITA DO AUTOR (APLICAR RIGOROSAMENTE):
+{writing_style}
+"""
+        if rag_style_context:
+            style_section += f"""
+REFERÊNCIAS DE ESTILO DA BASE DE CONHECIMENTO:
+{rag_style_context}
+"""
 
         # Step 2: Comprehensive edit
         edit_prompt = f"""Revise e melhore o seguinte artigo de blog:
 
 CONTEÚDO ORIGINAL:
 {content}
-
-REFERÊNCIA DE ESTILO:
-{style_context}
-
+{style_section}
 Por favor, faça uma revisão completa considerando:
 
-1. GRAMÁTICA E ORTOGRAFIA
+1. ESTILO DE ESCRITA (PRIORIDADE MÁXIMA)
+- Ajuste o tom e voz conforme o estilo definido
+- Aplique o vocabulário preferido
+- Siga a estrutura e formatação indicadas
+- Remova termos listados para evitar
+
+2. GRAMÁTICA E ORTOGRAFIA
 - Corrija erros gramaticais
 - Verifique concordância verbal e nominal
 - Corrija ortografia
 
-2. CLAREZA E FLUIDEZ
+3. CLAREZA E FLUIDEZ
 - Melhore transições entre parágrafos
 - Simplifique frases complexas demais
 - Garanta que cada parágrafo tenha um propósito claro
-
-3. ESTILO E TOM
-- Mantenha equilíbrio entre tom espiritual e profissional
-- Assegure consistência de voz ao longo do texto
-- Verifique se o conteúdo é acessível mas não superficial
 
 4. ESTRUTURA
 - Verifique se headers estão bem posicionados
@@ -106,7 +122,18 @@ Forneça:
 
 CONTEÚDO REVISADO:"""
 
-        system_prompt = """Você é um editor profissional especializado em conteúdo que une espiritualidade
+        # Use custom writing style if available
+        if writing_style:
+            system_prompt = f"""Você é um editor profissional que aplica RIGOROSAMENTE o estilo de escrita do autor.
+
+{writing_style}
+
+Seu objetivo é:
+1. Garantir que o texto siga o estilo definido
+2. Corrigir erros sem alterar a essência
+3. Elevar a qualidade mantendo a voz do autor"""
+        else:
+            system_prompt = """Você é um editor profissional especializado em conteúdo que une espiritualidade
 e negócios. Você tem olho afiado para:
 - Erros gramaticais e de estilo
 - Inconsistências de tom

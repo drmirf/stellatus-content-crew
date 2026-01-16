@@ -52,60 +52,84 @@ class ResearchAgent(BaseAgent):
         """Execute research task."""
         topic = task.description
         metadata = task.metadata
+        user_context = metadata.get("user_context", "")
 
-        self.logger.info("Starting research", topic=topic)
+        self.logger.info(
+            "Starting research",
+            topic=topic,
+            has_user_context=bool(user_context),
+        )
 
         research_data = {
             "topic": topic,
+            "user_context": user_context,
             "web_results": None,
             "rag_context": None,
             "analysis": None,
         }
 
-        # Step 1: Search the web for current information
-        web_result = await self.execute_skill(
-            "web_search",
-            params={
-                "query": f"{topic} misticismo gestão negócios",
-                "max_results": 5,
-            },
-        )
-        if web_result.success:
-            research_data["web_results"] = web_result.output
-
-        # Step 2: Query RAG for existing knowledge
+        # Step 1: PRIORITY - Query RAG for existing knowledge (using topic + user context)
+        rag_query = f"{topic}\n{user_context}" if user_context else topic
         rag_result = await self.execute_skill(
             "rag_query",
             params={
-                "query": topic,
+                "query": rag_query,
                 "collection": "both",
-                "n_results": 5,
+                "n_results": 10,  # More results for better coverage
             },
         )
         if rag_result.success:
             research_data["rag_context"] = rag_result.output
+            self.logger.info("RAG query completed", has_results=bool(rag_result.output))
 
-        # Step 3: Analyze and synthesize findings
+        # Step 2: Web search ONLY if RAG returned insufficient results
+        rag_docs = []
+        if rag_result.success and isinstance(rag_result.output, dict):
+            rag_docs = rag_result.output.get("documents", [])
+
+        if len(rag_docs) < 3:
+            self.logger.info("RAG insufficient, performing web search")
+            web_result = await self.execute_skill(
+                "web_search",
+                params={
+                    "query": f"{topic} misticismo gestão negócios",
+                    "max_results": 5,
+                },
+            )
+            if web_result.success:
+                research_data["web_results"] = web_result.output
+        else:
+            self.logger.info("RAG sufficient, skipping web search", rag_docs_count=len(rag_docs))
+
+        # Step 3: Analyze and synthesize findings (prioritizing RAG and user context)
+        user_context_section = ""
+        if user_context:
+            user_context_section = f"""
+CONTEXTO E DIRETRIZES DO USUÁRIO (PRIORIDADE ALTA):
+{user_context}
+"""
+
         analysis_prompt = f"""Analise as seguintes informações sobre o tópico "{topic}" e crie um resumo de pesquisa estruturado.
-
-INFORMAÇÕES DA WEB:
-{research_data.get('web_results', {}).get('summary', 'Nenhuma informação encontrada')}
-
-CONHECIMENTO EXISTENTE:
+{user_context_section}
+BASE DE CONHECIMENTO (REFERÊNCIA PRINCIPAL):
 {research_data.get('rag_context', 'Nenhum contexto disponível')}
 
+INFORMAÇÕES DA WEB (COMPLEMENTAR):
+{research_data.get('web_results', {}).get('summary', 'Não consultado') if research_data.get('web_results') else 'Não consultado - base de conhecimento suficiente'}
+
 Por favor, forneça:
-1. PRINCIPAIS PONTOS: Os insights mais importantes sobre o tópico
+1. PRINCIPAIS PONTOS: Os insights mais importantes sobre o tópico, priorizando a base de conhecimento
 2. CONEXÃO MISTICISMO-GESTÃO: Como o tema conecta sabedoria ancestral com práticas de negócios
 3. ÂNGULOS DE CONTEÚDO: 3-5 ângulos interessantes para abordar o tema
-4. FONTES E REFERÊNCIAS: Resumo das fontes encontradas
+4. DIRETRIZES DO USUÁRIO: Como incorporar o contexto específico solicitado
 5. PALAVRAS-CHAVE SUGERIDAS: Termos relevantes para o conteúdo
 
 Mantenha o tom equilibrado entre espiritualidade e pragmatismo nos negócios."""
 
         system_prompt = """Você é um pesquisador especializado em criar conexões entre sabedoria ancestral/misticismo
 e práticas modernas de gestão e negócios. Seu objetivo é encontrar insights únicos que unam
-esses dois mundos de forma autêntica e prática."""
+esses dois mundos de forma autêntica e prática. PRIORIZE sempre o conteúdo da base de conhecimento
+e as diretrizes do usuário."""
 
         analysis_result = await self.execute_skill(
             "llm_call",
@@ -121,8 +145,9 @@ esses dois mundos de forma autêntica e prática."""
         # Compile research brief
         research_brief = {
             "topic": topic,
+            "user_context": user_context,
             "analysis": research_data.get("analysis", ""),
-            "web_sources": research_data.get("web_results", {}).get("results", []),
+            "web_sources": research_data.get("web_results", {}).get("results", []) if research_data.get("web_results") else [],
             "rag_context": research_data.get("rag_context", ""),
             "metadata": metadata,
         }
@@ -131,5 +156,9 @@ esses dois mundos de forma autêntica e prática."""
             task_id=task.task_id,
             success=True,
             output=research_brief,
-            metadata={"sources_count": len(research_brief.get("web_sources", []))},
+            metadata={
+                "sources_count": len(research_brief.get("web_sources", [])),
+                "rag_used": bool(research_data.get("rag_context")),
+                "web_used": bool(research_data.get("web_results")),
+            },
         )

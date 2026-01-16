@@ -34,11 +34,30 @@ def cli(debug: bool) -> None:
 @click.option("--length", "-l", default=1500, help="Target word count")
 @click.option("--output", "-o", default="output/articles", help="Output directory")
 @click.option("--format", "-f", type=click.Choice(["md", "json", "both"]), default="md")
+@click.option("--context", "-c", default=None, help="Detailed context/prompt for the article")
+@click.option("--context-file", "-cf", type=click.Path(exists=True), default=None, help="File with detailed context")
 @click.option("--notion", is_flag=True, help="Publish to Notion as draft")
 @click.option("--no-local", is_flag=True, help="Don't save locally (use with --notion)")
-def create(topic: str, length: int, output: str, format: str, notion: bool, no_local: bool) -> None:
+def create(
+    topic: str,
+    length: int,
+    output: str,
+    format: str,
+    context: str | None,
+    context_file: str | None,
+    notion: bool,
+    no_local: bool,
+) -> None:
     """Create new content on a topic."""
+    # Load context from file if provided
+    user_context = context
+    if context_file:
+        with open(context_file, encoding="utf-8") as f:
+            user_context = f.read()
+
     console.print(Panel(f"[bold blue]Creating content about:[/] {topic}"))
+    if user_context:
+        console.print(f"[dim]Context provided: {len(user_context)} characters[/]")
 
     async def run_pipeline():
         pipeline = ContentPipeline()
@@ -54,6 +73,7 @@ def create(topic: str, length: int, output: str, format: str, notion: bool, no_l
             result = await pipeline.create_content(
                 topic=topic,
                 target_length=length,
+                user_context=user_context,
             )
 
             # Save locally unless --no-local is set
